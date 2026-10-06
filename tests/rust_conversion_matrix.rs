@@ -48,7 +48,10 @@ fn failed_conversion_retains_process_evidence() {
     for row in result.observations {
         let value = serde_json::to_value(row).unwrap();
         assert_eq!(value["status"], "failed");
-        assert!(!value["command"].as_array().unwrap().is_empty());
+        assert_ne!(
+            value["command"].as_array().unwrap().as_slice(),
+            [] as [serde_json::Value; 0]
+        );
         assert_eq!(value["report"]["execution_error"]["returncode"], 7);
         assert!(
             value["report"]["execution_error"]["stderr"]
