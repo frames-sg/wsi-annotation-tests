@@ -1,6 +1,6 @@
 # DICOM WSI Annotation Interoperability Harness
 
-This README describes the published [0.1.2 CLI](https://crates.io/crates/wsi-annotation-interop/0.1.2)
+This README describes the [0.1.3 CLI](https://crates.io/crates/wsi-annotation-interop/0.1.3)
 and study-profile commands. The source checkout includes the Python reference
 shim and study configuration files.
 
