@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use wsi_annotation_interop::compare::{compare_ann, compare_seg};
+use wsi_annotation_tests::compare::{compare_ann, compare_seg};
 
 fn ann() -> Value {
     json!({
@@ -27,7 +27,7 @@ fn ann() -> Value {
     })
 }
 
-fn finding_codes(result: &wsi_annotation_interop::compare::ComparisonResult) -> Vec<&str> {
+fn finding_codes(result: &wsi_annotation_tests::compare::ComparisonResult) -> Vec<&str> {
     result
         .findings
         .iter()

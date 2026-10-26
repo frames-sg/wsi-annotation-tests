@@ -98,6 +98,30 @@ pub struct ProbeObservation {
     pub stderr_truncated: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+pub(crate) struct ProbeMeasurements {
+    pub runtime_ms: Option<f64>,
+    pub peak_rss_bytes: Option<u64>,
+    pub peak_tracked_heap_bytes: Option<u64>,
+}
+
+pub(crate) fn tracked_heap_bytes(report: &Value) -> Option<u64> {
+    report
+        .pointer("/runtime/peak_tracked_heap_bytes")
+        .or_else(|| report.get("peak_tracked_heap_bytes"))
+        .and_then(Value::as_u64)
+}
+
+impl ProbeObservation {
+    pub(crate) fn measurements(&self) -> ProbeMeasurements {
+        ProbeMeasurements {
+            runtime_ms: Some(self.elapsed_ms),
+            peak_rss_bytes: self.rss_sampled.then_some(self.peak_rss_bytes),
+            peak_tracked_heap_bytes: tracked_heap_bytes(&self.report),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ProbeError {
     #[serde(flatten)]
@@ -134,6 +158,14 @@ impl fmt::Display for ProbeError {
 impl std::error::Error for ProbeError {}
 
 impl ProbeError {
+    pub(crate) fn measurements(&self) -> ProbeMeasurements {
+        ProbeMeasurements {
+            runtime_ms: self.elapsed_ms(),
+            peak_rss_bytes: self.peak_rss_bytes,
+            peak_tracked_heap_bytes: self.report.as_ref().and_then(tracked_heap_bytes),
+        }
+    }
+
     /// Measured subprocess time, absent when the process could not be launched.
     #[must_use]
     pub(crate) const fn elapsed_ms(&self) -> Option<f64> {

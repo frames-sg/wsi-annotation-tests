@@ -1,4 +1,5 @@
-use std::env;
+mod support;
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -8,10 +9,13 @@ use tempfile::tempdir;
 
 #[test]
 fn rust_cli_owns_help_and_usage_exit_codes() {
-    let executable = env!("CARGO_BIN_EXE_wsi-annotation-interop");
+    let executable = env!("CARGO_BIN_EXE_wsi-annotation-tests");
 
     let help = Command::new(executable).arg("--help").output().unwrap();
     assert!(help.status.success());
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("DICOM Annotation Test Suite"));
+    assert!(help_text.contains("Usage: wsi-annotation-tests"));
     assert!(
         String::from_utf8_lossy(&help.stdout)
             .contains("Neutral DICOM WSI ANN/SEG/SR/PM interoperability harness")
@@ -33,7 +37,7 @@ fn rust_cli_owns_help_and_usage_exit_codes() {
 
 #[test]
 fn rust_cli_reports_pydcm_as_nonprimary() {
-    let executable = env!("CARGO_BIN_EXE_wsi-annotation-interop");
+    let executable = env!("CARGO_BIN_EXE_wsi-annotation-tests");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let python = root.join(".venv/bin/python");
     let shim = root.join("shim/reference_shim.py");
@@ -76,19 +80,10 @@ fn rust_cli_reports_pydcm_as_nonprimary() {
 #[test]
 #[ignore = "requires the external annotation_probe built by scripts/check-core.sh"]
 fn rust_cli_runs_core_with_external_annotation_probe() {
-    let executable = env!("CARGO_BIN_EXE_wsi-annotation-interop");
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let python = root.join(".venv/bin/python");
-    let shim = root.join("shim/reference_shim.py");
-    let probe = env::var_os("ANNOTATION_PROBE").map_or_else(
-        || root.join("../dicom-viewer/target/debug/annotation_probe"),
-        PathBuf::from,
-    );
-    assert!(python.is_file(), "run `uv sync --locked` first");
-    assert!(
-        probe.is_file(),
-        "build annotation_probe or set ANNOTATION_PROBE"
-    );
+    let executable = env!("CARGO_BIN_EXE_wsi-annotation-tests");
+    let python = support::reference_python();
+    let shim = support::root().join("shim/reference_shim.py");
+    let probe = support::probe_path();
     let directory = tempdir().unwrap();
     let core = Command::new(executable)
         .args(["--reference-python", python.to_str().unwrap()])

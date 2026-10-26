@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use wsi_annotation_interop::probe::{
+use wsi_annotation_tests::probe::{
     GeoJsonCoordinateSpace, GeoJsonTarget, PayloadMode, RasterChannels, ViewerProbe,
 };
 

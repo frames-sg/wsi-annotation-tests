@@ -9,7 +9,7 @@ use std::thread;
 
 use serde_json::json;
 use tempfile::{TempDir, tempdir};
-use wsi_annotation_interop::orthanc::{
+use wsi_annotation_tests::orthanc::{
     DicomwebLimits, DicomwebObject, DicomwebTransportResult, LocalOrthanc, orthanc_configuration,
     validate_loopback_url, verify_dicomweb_transport, verify_dicomweb_transport_with_limits,
 };

@@ -4,7 +4,7 @@ use std::fs;
 use std::time::Duration;
 
 use tempfile::tempdir;
-use wsi_annotation_interop::validators::{
+use wsi_annotation_tests::validators::{
     ValidatorInvocation, ValidatorSpec, ValidatorStatus,
     qualify_tiled_segmentation_sr_validator_defect, qualify_validate_iods_pm_defect,
     qualify_validate_iods_seg_defect, run_validator, standard_validator_specs,

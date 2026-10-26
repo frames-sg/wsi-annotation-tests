@@ -1,43 +1,15 @@
-use std::env;
+mod support;
+
 use std::fs;
-use std::path::PathBuf;
-use std::time::Duration;
 
 use serde_json::Value;
 use tempfile::tempdir;
-use wsi_annotation_interop::probe::ViewerProbe;
-use wsi_annotation_interop::run_core_profile;
-use wsi_annotation_interop::shim::ReferenceShim;
+use wsi_annotation_tests::run_core_profile;
 
 #[test]
 #[ignore = "requires the external annotation_probe built by scripts/check-core.sh"]
 fn rust_core_profile_writes_matrix_and_nonprimary_qualification_results() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let python = root.join(".venv/bin/python");
-    let probe_path = env::var_os("ANNOTATION_PROBE").map_or_else(
-        || root.join("../dicom-viewer/target/debug/annotation_probe"),
-        PathBuf::from,
-    );
-    assert!(python.is_file(), "run `uv sync --locked` first");
-    assert!(
-        probe_path.is_file(),
-        "build annotation_probe or set ANNOTATION_PROBE"
-    );
-    let reference = ReferenceShim::new(
-        vec![
-            python.to_string_lossy().into_owned(),
-            root.join("shim/reference_shim.py")
-                .to_string_lossy()
-                .into_owned(),
-        ],
-        Duration::from_mins(10),
-    )
-    .unwrap();
-    let probe = ViewerProbe::new(
-        vec![probe_path.to_string_lossy().into_owned()],
-        Some(Duration::from_mins(10)),
-    )
-    .unwrap();
+    let (reference, probe) = support::real_adapters();
     let directory = tempdir().unwrap();
 
     let result = run_core_profile(&reference, &probe, directory.path(), "rust-core-test").unwrap();

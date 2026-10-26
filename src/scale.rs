@@ -6,7 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::compare::compare_ann;
-use crate::probe::{PayloadMode, ProbeObservation, ViewerProbe};
+use crate::probe::{PayloadMode, ProbeError, ProbeMeasurements, ProbeObservation, ViewerProbe};
 use crate::shim::ReferenceShim;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +43,8 @@ pub struct ScaleObservation {
     pub peak_tracked_heap_bytes: Option<u64>,
     pub viewer_implementation: Value,
     pub probe_commands: BTreeMap<String, Vec<String>>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub execution_errors: BTreeMap<String, ProbeError>,
     pub coordinate_error_max_px: Option<f64>,
     pub message: String,
 }
@@ -91,10 +93,7 @@ pub fn run_scale_cases(
     Ok(cases
         .iter()
         .copied()
-        .map(|case| {
-            run_scale_case(reference, probe, source, directory, case)
-                .unwrap_or_else(|message| failed(directory, case, message))
-        })
+        .map(|case| run_scale_case(reference, probe, source, directory, case))
         .collect())
 }
 
@@ -104,63 +103,82 @@ fn run_scale_case(
     source: &Path,
     directory: &Path,
     case: ScaleCase,
-) -> Result<ScaleObservation, String> {
+) -> ScaleObservation {
     let case_id = case.id();
     let input = directory.join(format!("{case_id}-input.dcm"));
     let output = directory.join(format!("{case_id}-roundtrip.dcm"));
-    reference
-        .build_scale_ann(source, &input, case.coordinate_values)
-        .map_err(|error| error.to_string())?;
-    let inspected = probe
-        .inspect(source, &input, None, PayloadMode::Digest)
-        .map_err(|error| error.to_string())?;
-    let roundtripped = probe
-        .roundtrip(source, &input, &output, None, PayloadMode::Digest, false)
-        .map_err(|error| error.to_string())?;
-    let comparison = compare_ann(&inspected.report, &roundtripped.report, 1e-6, 1e-9)?;
-    let passed = comparison.is_ok();
-    Ok(ScaleObservation {
-        case_id,
-        coordinate_values: case.coordinate_values,
-        required: case.required,
-        status: if passed {
+    let mut observation = failed(directory, case, String::new());
+    let result = (|| -> Result<(), String> {
+        reference
+            .build_scale_ann(source, &input, case.coordinate_values)
+            .map_err(|error| error.to_string())?;
+        let inspected = probe
+            .inspect(source, &input, None, PayloadMode::Digest)
+            .map_err(|error| observation.record_error("inspect", error))?;
+        observation.record_probe("inspect", &inspected);
+        let roundtripped = probe
+            .roundtrip(source, &input, &output, None, PayloadMode::Digest, false)
+            .map_err(|error| observation.record_error("roundtrip", error))?;
+        observation.record_probe("roundtrip", &roundtripped);
+        let comparison = compare_ann(&inspected.report, &roundtripped.report, 1e-6, 1e-9)?;
+        observation.status = if comparison.is_ok() {
             ScaleStatus::Passed
         } else {
             ScaleStatus::Failed
-        },
-        input_bytes: Some(file_size(&input)?),
-        output_bytes: Some(file_size(&output)?),
-        runtime_ms: Some(inspected.elapsed_ms + roundtripped.elapsed_ms),
-        peak_rss_bytes: Some(inspected.peak_rss_bytes.max(roundtripped.peak_rss_bytes)),
-        viewer_runtime: BTreeMap::from([
-            ("inspect".to_owned(), inspected.report["runtime"].clone()),
-            (
-                "roundtrip".to_owned(),
-                roundtripped.report["runtime"].clone(),
-            ),
-        ]),
-        peak_tracked_heap_bytes: Some(tracked_heap(&inspected).max(tracked_heap(&roundtripped))),
-        viewer_implementation: inspected.report["implementation"].clone(),
-        probe_commands: BTreeMap::from([
-            ("inspect".to_owned(), inspected.command),
-            ("roundtrip".to_owned(), roundtripped.command),
-        ]),
-        coordinate_error_max_px: Some(comparison.coordinate_error.max),
-        message: comparison
+        };
+        observation.coordinate_error_max_px = Some(comparison.coordinate_error.max);
+        observation.message = comparison
             .findings
             .into_iter()
             .map(|finding| finding.message)
             .collect::<Vec<_>>()
-            .join("; "),
-    })
+            .join("; ");
+        observation.input_bytes = Some(file_size(&input)?);
+        observation.output_bytes = Some(file_size(&output)?);
+        Ok(())
+    })();
+    if let Err(message) = result {
+        observation.status = ScaleStatus::Failed;
+        observation.message = message;
+        observation.input_bytes = fs::metadata(&input).ok().map(|metadata| metadata.len());
+        observation.output_bytes = fs::metadata(&output).ok().map(|metadata| metadata.len());
+    }
+    observation
 }
 
-fn tracked_heap(observation: &ProbeObservation) -> u64 {
-    observation
-        .report
-        .pointer("/runtime/peak_tracked_heap_bytes")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
+impl ScaleObservation {
+    fn record_measurements(&mut self, measurements: ProbeMeasurements) {
+        if let Some(runtime) = measurements.runtime_ms {
+            self.runtime_ms = Some(self.runtime_ms.unwrap_or(0.0) + runtime);
+        }
+        if let Some(rss) = measurements.peak_rss_bytes {
+            self.peak_rss_bytes = Some(self.peak_rss_bytes.unwrap_or(0).max(rss));
+        }
+        if let Some(heap) = measurements.peak_tracked_heap_bytes {
+            self.peak_tracked_heap_bytes =
+                Some(self.peak_tracked_heap_bytes.unwrap_or(0).max(heap));
+        }
+    }
+
+    fn record_probe(&mut self, phase: &str, probe: &ProbeObservation) {
+        self.record_measurements(probe.measurements());
+        self.viewer_runtime
+            .insert(phase.to_owned(), probe.report["runtime"].clone());
+        self.viewer_implementation = probe.report["implementation"].clone();
+        self.probe_commands
+            .insert(phase.to_owned(), probe.command.clone());
+    }
+
+    fn record_error(&mut self, phase: &str, error: ProbeError) -> String {
+        let message = error.to_string();
+        self.record_measurements(error.measurements());
+        if let Some(command) = error.command.as_deref() {
+            self.probe_commands
+                .insert(phase.to_owned(), command.clone());
+        }
+        self.execution_errors.insert(phase.to_owned(), error);
+        message
+    }
 }
 
 fn file_size(path: &Path) -> Result<u64, String> {
@@ -186,6 +204,7 @@ fn failed(directory: &Path, case: ScaleCase, message: String) -> ScaleObservatio
         peak_tracked_heap_bytes: None,
         viewer_implementation: Value::Object(serde_json::Map::new()),
         probe_commands: BTreeMap::new(),
+        execution_errors: BTreeMap::new(),
         coordinate_error_max_px: None,
         message,
     }

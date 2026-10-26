@@ -1,7 +1,7 @@
 [project]
-name = "wsi-annotation-interop-reference-shim"
+name = "wsi-annotation-tests-reference-shim"
 version = "0.1.0"
-description = "Independent highdicom/pydicom reference shim for the Rust interoperability harness"
+description = "Independent highdicom/pydicom reference shim for the DICOM Annotation Test Suite"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 license = "MIT"

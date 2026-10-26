@@ -1,4 +1,4 @@
-use wsi_annotation_interop::metrics::{
+use wsi_annotation_tests::metrics::{
     BinaryRun, MetricComputationStatus, MetricLimits, segmentation_metrics,
     segmentation_metrics_with_limits,
 };

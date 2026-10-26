@@ -6,16 +6,16 @@ use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 use serde_json::json;
 use tempfile::TempDir;
-use wsi_annotation_interop::probe::ViewerProbe;
-use wsi_annotation_interop::shim::ReferenceShim;
-use wsi_annotation_interop::validators::{ValidatorStatus, run_standard_validators};
-use wsi_annotation_interop::{run_core_profile, run_full_profile};
+use wsi_annotation_tests::probe::ViewerProbe;
+use wsi_annotation_tests::shim::ReferenceShim;
+use wsi_annotation_tests::validators::{ValidatorStatus, run_standard_validators};
+use wsi_annotation_tests::{run_core_profile, run_full_profile};
 
 #[derive(Parser)]
 #[command(
-    name = "wsi-annotation-interop",
+    name = "wsi-annotation-tests",
     version,
-    about = "Neutral DICOM WSI ANN/SEG/SR/PM interoperability harness"
+    about = "DICOM Annotation Test Suite: Neutral DICOM WSI ANN/SEG/SR/PM interoperability harness"
 )]
 struct Cli {
     #[arg(long, global = true, default_value = ".venv/bin/python")]

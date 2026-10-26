@@ -1,12 +1,13 @@
+mod support;
+
 use std::collections::BTreeMap;
-use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tempfile::tempdir;
-use wsi_annotation_interop::probe::ViewerProbe;
-use wsi_annotation_interop::run_conversion_matrices;
-use wsi_annotation_interop::shim::{FixtureSet, ReferenceShim};
+use wsi_annotation_tests::probe::ViewerProbe;
+use wsi_annotation_tests::run_conversion_matrices;
+use wsi_annotation_tests::shim::{FixtureSet, ReferenceShim};
 
 #[test]
 fn failed_conversion_retains_process_evidence() {
@@ -67,32 +68,7 @@ fn failed_conversion_retains_process_evidence() {
 #[test]
 #[ignore = "requires the external annotation_probe built by scripts/check-core.sh"]
 fn rust_runs_separate_geojson_sr_and_parametric_map_conversion_matrices() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let python = root.join(".venv/bin/python");
-    assert!(python.is_file(), "run `uv sync --locked` first");
-    let probe_path = env::var_os("ANNOTATION_PROBE").map_or_else(
-        || root.join("../dicom-viewer/target/debug/annotation_probe"),
-        PathBuf::from,
-    );
-    assert!(
-        probe_path.is_file(),
-        "build annotation_probe or set ANNOTATION_PROBE"
-    );
-    let reference = ReferenceShim::new(
-        vec![
-            python.to_string_lossy().into_owned(),
-            root.join("shim/reference_shim.py")
-                .to_string_lossy()
-                .into_owned(),
-        ],
-        Duration::from_mins(10),
-    )
-    .unwrap();
-    let probe = ViewerProbe::new(
-        vec![probe_path.to_string_lossy().into_owned()],
-        Some(Duration::from_mins(10)),
-    )
-    .unwrap();
+    let (reference, probe) = support::real_adapters();
     let directory = tempdir().unwrap();
     let fixtures = reference
         .generate_core(&directory.path().join("fixtures"))
@@ -139,7 +115,13 @@ fn rust_runs_separate_geojson_sr_and_parametric_map_conversion_matrices() {
     assert_eq!(concatenation.output_paths.len(), 3);
     assert_eq!(concatenation.normalized.as_array().unwrap().len(), 3);
 
-    assert_corruption_is_rejected(&root, &python, &fixtures, &probe, directory.path());
+    assert_corruption_is_rejected(
+        &support::root(),
+        &support::reference_python(),
+        &fixtures,
+        &probe,
+        directory.path(),
+    );
 }
 
 fn assert_corruption_is_rejected(

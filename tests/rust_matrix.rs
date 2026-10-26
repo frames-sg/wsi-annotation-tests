@@ -1,13 +1,14 @@
+mod support;
+
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use tempfile::tempdir;
-use wsi_annotation_interop::probe::ViewerProbe;
-use wsi_annotation_interop::shim::{FixtureSet, ReferenceShim};
-use wsi_annotation_interop::{build_core_ground_truth, run_core_matrix};
+use wsi_annotation_tests::probe::ViewerProbe;
+use wsi_annotation_tests::shim::{FixtureSet, ReferenceShim};
+use wsi_annotation_tests::{build_core_ground_truth, run_core_matrix};
 
 #[test]
 fn rust_matrix_rejects_tampered_ground_truth_before_running_tools() {
@@ -53,43 +54,15 @@ fn rust_matrix_rejects_tampered_ground_truth_before_running_tools() {
 #[test]
 #[ignore = "requires the external annotation_probe built by scripts/check-core.sh"]
 fn rust_runs_the_complete_highdicom_viewer_core_matrix() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let python = root.join(".venv/bin/python");
-    assert!(
-        python.is_file(),
-        "run `uv sync --locked` before the cross-language matrix test"
-    );
-    let probe_path = env::var_os("ANNOTATION_PROBE").map_or_else(
-        || root.join("../dicom-viewer/target/debug/annotation_probe"),
-        PathBuf::from,
-    );
-    assert!(
-        probe_path.is_file(),
-        "build annotation_probe or set ANNOTATION_PROBE"
-    );
-    let shim = ReferenceShim::new(
-        vec![
-            python.to_string_lossy().into_owned(),
-            root.join("shim/reference_shim.py")
-                .to_string_lossy()
-                .into_owned(),
-        ],
-        Duration::from_mins(10),
-    )
-    .unwrap();
-    let probe = ViewerProbe::new(
-        vec![probe_path.to_string_lossy().into_owned()],
-        Some(Duration::from_mins(10)),
-    )
-    .unwrap();
+    let (reference, probe) = support::real_adapters();
     let directory = tempdir().unwrap();
-    let fixtures = shim
+    let fixtures = reference
         .generate_core(&directory.path().join("fixtures"))
         .unwrap();
 
     let result = run_core_matrix(
         &fixtures,
-        &shim,
+        &reference,
         &probe,
         &directory.path().join("roundtrips"),
     )

@@ -5,7 +5,7 @@ use std::process::{Command, Output};
 
 use serde_json::{Value, json};
 use tempfile::tempdir;
-use wsi_annotation_interop::results::{RunWriter, collect_provenance};
+use wsi_annotation_tests::results::{RunWriter, collect_provenance};
 
 #[test]
 fn run_writer_creates_an_exclusive_checksummed_run_with_tables_and_figures() {
@@ -93,7 +93,7 @@ fn materialized_harness_does_not_inherit_an_ancestor_repository() {
     let directory = tempdir().unwrap();
     let repository = directory.path().join("study");
     let ancestor_sha = initialize_repository(&repository);
-    let harness = repository.join("frozen-components/wsi-annotation-interop");
+    let harness = repository.join("frozen-components/wsi-annotation-tests");
     fs::create_dir_all(&harness).unwrap();
 
     let provenance = collect_provenance(&harness, None);

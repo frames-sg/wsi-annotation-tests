@@ -1,4 +1,4 @@
-name: Interoperability
+name: DICOM Annotation Test Suite
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
       - name: Checkout harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: wsi-annotation-interop
+          path: wsi-annotation-tests
           persist-credentials: false
 
       - name: Checkout wsi-dicom-annotations
@@ -57,20 +57,20 @@ jobs:
           enable-cache: true
 
       - name: Verify cross-repository core gate
-        working-directory: wsi-annotation-interop
+        working-directory: wsi-annotation-tests
         env:
           WSI_DICOM_ANNOTATIONS_ROOT: ${{ github.workspace }}/wsi-dicom-annotations
         run: ./scripts/check-core.sh
 
       - name: Publish core-profile run directory
         if: always()
-        working-directory: wsi-annotation-interop
+        working-directory: wsi-annotation-tests
         env:
           ANNOTATION_PROBE: ${{ github.workspace }}/wsi-dicom-annotations/target/debug/annotation_probe
           RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}-core
         run: |
           set +e
-          target/release/wsi-annotation-interop run-core \
+          target/release/wsi-annotation-tests run-core \
             --probe "${ANNOTATION_PROBE}" \
             --results results \
             --run-id "${RUN_ID}"
@@ -87,12 +87,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wsi-annotation-interop-core-${{ github.run_id }}-${{ github.run_attempt }}
+          name: wsi-annotation-tests-core-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            wsi-annotation-interop/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core/
-            wsi-annotation-interop/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.tar.gz
-            wsi-annotation-interop/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.tar.gz.sha256
-            wsi-annotation-interop/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.manifest.sha256
+            wsi-annotation-tests/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core/
+            wsi-annotation-tests/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.tar.gz
+            wsi-annotation-tests/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.tar.gz.sha256
+            wsi-annotation-tests/results/github-${{ github.run_id }}-${{ github.run_attempt }}-core.manifest.sha256
           if-no-files-found: error
 
   full:
@@ -104,7 +104,7 @@ jobs:
       - name: Checkout harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: wsi-annotation-interop
+          path: wsi-annotation-tests
           persist-credentials: false
 
       - name: Checkout wsi-dicom-annotations
@@ -124,7 +124,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       - name: Run explicit full gate
-        working-directory: wsi-annotation-interop
+        working-directory: wsi-annotation-tests
         env:
           WSI_DICOM_ANNOTATIONS_ROOT: ${{ github.workspace }}/wsi-dicom-annotations
           ORTHANC_EXECUTABLE: ${{ inputs.orthanc_executable }}
@@ -133,7 +133,7 @@ jobs:
 
       - name: Hash full-profile bundle
         if: always()
-        working-directory: wsi-annotation-interop
+        working-directory: wsi-annotation-tests
         env:
           RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
@@ -147,6 +147,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wsi-annotation-interop-${{ github.run_id }}-${{ github.run_attempt }}
-          path: wsi-annotation-interop/results/
+          name: wsi-annotation-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: wsi-annotation-tests/results/
           if-no-files-found: error

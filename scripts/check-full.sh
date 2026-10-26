@@ -23,7 +23,7 @@ cargo build --manifest-path "${annotations_root}/Cargo.toml" \
   -p wsi-annotation-probe --bin annotation_probe --release --locked
 
 cd "${harness_root}"
-target/release/wsi-annotation-interop run-full \
+target/release/wsi-annotation-tests run-full \
   --probe "${annotations_root}/target/release/annotation_probe" \
   --orthanc "${orthanc_executable}" \
   --results results \

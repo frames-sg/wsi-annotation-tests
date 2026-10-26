@@ -1,42 +1,12 @@
-use std::env;
+mod support;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
 use tempfile::tempdir;
-use wsi_annotation_interop::probe::ViewerProbe;
-use wsi_annotation_interop::shim::ReferenceShim;
-use wsi_annotation_interop::{ScaleCase, ScaleStatus, default_scale_cases, run_scale_cases};
-
-fn real_adapters() -> (ReferenceShim, ViewerProbe) {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let python = root.join(".venv/bin/python");
-    assert!(python.is_file(), "run `uv sync --locked` first");
-    let probe = env::var_os("ANNOTATION_PROBE").map_or_else(
-        || root.join("../dicom-viewer/target/debug/annotation_probe"),
-        PathBuf::from,
-    );
-    assert!(
-        probe.is_file(),
-        "build annotation_probe or set ANNOTATION_PROBE"
-    );
-    (
-        ReferenceShim::new(
-            vec![
-                python.to_string_lossy().into_owned(),
-                root.join("shim/reference_shim.py")
-                    .to_string_lossy()
-                    .into_owned(),
-            ],
-            Duration::from_mins(10),
-        )
-        .unwrap(),
-        ViewerProbe::new(
-            vec![probe.to_string_lossy().into_owned()],
-            Some(Duration::from_mins(10)),
-        )
-        .unwrap(),
-    )
-}
+use wsi_annotation_tests::probe::ViewerProbe;
+use wsi_annotation_tests::shim::ReferenceShim;
+use wsi_annotation_tests::{ScaleCase, ScaleStatus, default_scale_cases, run_scale_cases};
 
 #[test]
 fn scale_profile_requires_one_million_and_profiles_five_million_coordinates() {
@@ -55,9 +25,78 @@ fn scale_profile_requires_one_million_and_profiles_five_million_coordinates() {
 }
 
 #[test]
+fn failed_scale_roundtrip_retains_inspection_and_failure_evidence() {
+    let directory = tempdir().unwrap();
+    let python = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".venv/bin/python");
+    let reference = ReferenceShim::from_program(
+        python.as_os_str(),
+        vec![
+            "-c".into(),
+            r"import pathlib, sys
+pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_bytes(b'fixture')
+print('{}')
+"
+            .into(),
+        ],
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    let script = directory.path().join("probe.py");
+    let inspected: serde_json::Value =
+        serde_json::from_str(include_str!("data/ann-report.json")).unwrap();
+    std::fs::write(
+        &script,
+        format!(
+            r"import json, sys
+if sys.argv[1] == 'inspect':
+    print({:?})
+else:
+    print(json.dumps({{'schema_version': 1, 'status': 'error', 'operation': 'roundtrip',
+        'implementation': {{'name': 'test-probe', 'version': '1'}},
+        'error': {{'code': 'WRITE_FAILED', 'message': 'roundtrip diagnostic'}}}}))
+    print('retained stderr diagnostic', file=sys.stderr)
+    sys.exit(7)
+",
+            inspected.to_string()
+        ),
+    )
+    .unwrap();
+    let probe = ViewerProbe::from_program(
+        python,
+        vec![script.into_os_string()],
+        Some(Duration::from_secs(5)),
+    )
+    .unwrap();
+    let rows = run_scale_cases(
+        &reference,
+        &probe,
+        &directory.path().join("source.dcm"),
+        &directory.path().join("scale"),
+        &[ScaleCase {
+            coordinate_values: 1000,
+            required: false,
+        }],
+    )
+    .unwrap();
+    let row = serde_json::to_value(&rows[0]).unwrap();
+    assert_eq!(row["status"], "failed");
+    assert!(row["runtime_ms"].as_f64().is_some_and(|value| value > 0.0));
+    assert_eq!(row["viewer_runtime"]["inspect"], inspected["runtime"]);
+    assert_eq!(row["peak_tracked_heap_bytes"], 4096);
+    assert_eq!(row["probe_commands"].as_object().unwrap().len(), 2);
+    assert_eq!(row["execution_errors"]["roundtrip"]["returncode"], 7);
+    assert!(
+        row["execution_errors"]["roundtrip"]["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("retained stderr diagnostic")
+    );
+}
+
+#[test]
 #[ignore = "requires the external annotation_probe built by scripts/check-core.sh"]
 fn rust_runs_a_scale_roundtrip_with_digest_payloads() {
-    let (reference, probe) = real_adapters();
+    let (reference, probe) = support::real_adapters();
     let directory = tempdir().unwrap();
     let fixtures = reference
         .generate_core(&directory.path().join("fixtures"))

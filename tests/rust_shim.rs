@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{collections::BTreeMap, fs};
 
 use tempfile::tempdir;
-use wsi_annotation_interop::shim::ReferenceShim;
+use wsi_annotation_tests::shim::ReferenceShim;
 
 #[test]
 fn reference_shim_uses_a_json_only_subprocess_contract() {
@@ -91,6 +91,6 @@ fn reference_shim_uses_a_json_only_subprocess_contract() {
         serde_json::from_slice(&fs::read(&observed.ground_truth).unwrap()).unwrap();
     assert_eq!(
         ground_truth,
-        wsi_annotation_interop::build_core_ground_truth()
+        wsi_annotation_tests::build_core_ground_truth()
     );
 }

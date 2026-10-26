@@ -282,7 +282,7 @@ wheels = [
 ]
 
 [[package]]
-name = "wsi-annotation-interop-reference-shim"
+name = "wsi-annotation-tests-reference-shim"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

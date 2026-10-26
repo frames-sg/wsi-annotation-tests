@@ -1,11 +1,13 @@
 [package]
-name = "wsi-annotation-interop"
+name = "wsi-annotation-tests"
 version = "0.1.3"
 edition = "2024"
 rust-version = "1.99.0"
-description = "Neutral DICOM WSI ANN/SEG interoperability harness"
+description = "DICOM Annotation Test Suite for WSI ANN, SEG, SR, and Parametric Map"
 license = "MIT"
-repository = "https://github.com/frames-sg/wsi-annotation-interop"
+repository = "https://github.com/frames-sg/wsi-annotation-tests"
+homepage = "https://frames-sg.com/dicom-whole-slide-conversion/"
+documentation = "https://docs.rs/wsi-annotation-tests"
 readme = "README.md"
 keywords = ["dicom", "whole-slide", "pathology", "annotations"]
 categories = ["science"]

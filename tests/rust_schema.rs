@@ -1,5 +1,5 @@
 use serde_json::Value;
-use wsi_annotation_interop::schema::{
+use wsi_annotation_tests::schema::{
     RunManifestVersion, validate_compatible_run_manifest, validate_conversion_report,
     validate_matrix_observation, validate_pathology_mapping, validate_probe_report,
     validate_raster_profile, validate_run_manifest, validate_tiled_manifest,
@@ -24,7 +24,7 @@ fn committed_v1_manifest_remains_readable_without_fabricated_provenance() {
 #[test]
 fn published_run_manifest_v2_validates_and_rejects_v1() {
     let directory = tempfile::tempdir().unwrap();
-    let mut writer = wsi_annotation_interop::results::RunWriter::new(
+    let mut writer = wsi_annotation_tests::results::RunWriter::new(
         directory.path(),
         "schema-v2",
         serde_json::json!({"profile": "core"}),
