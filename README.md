@@ -3,12 +3,12 @@
 [![Annotation tests](https://github.com/frames-sg/wsi-annotation-tests/actions/workflows/interop.yml/badge.svg?branch=main)](https://github.com/frames-sg/wsi-annotation-tests/actions/workflows/interop.yml?query=branch%3Amain)
 
 [DICOM whole-slide workflow](https://frames-sg.com/dicom-whole-slide-conversion/) ·
-[Published 0.1.3 API documentation](https://docs.rs/wsi-annotation-interop/0.1.3)
+[API documentation](https://docs.rs/wsi-annotation-tests/0.1.3)
 
-The Cargo package and command in this checkout are named `wsi-annotation-tests`.
-The previously published [0.1.3 CLI](https://crates.io/crates/wsi-annotation-interop/0.1.3)
-remains available under its original `wsi-annotation-interop` name. The source
-checkout includes the Python reference shim and study configuration files.
+This README describes the [0.1.3 CLI](https://crates.io/crates/wsi-annotation-tests/0.1.3)
+and study-profile commands. The Cargo package and command are named
+`wsi-annotation-tests`; earlier releases used the `wsi-annotation-interop` name.
+The source checkout includes the Python reference shim and study configuration files.
 
 This repository is the neutral Rust study harness for comparing DICOM Whole
 Slide Microscopy ANN, SEG, Comprehensive 3D SR, and Parametric Map
