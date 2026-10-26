@@ -23,6 +23,8 @@ dev = [
 
 [tool.uv]
 package = false
+# Pillow 13.0.0 fixes the image-codec advisories affecting earlier releases.
+constraint-dependencies = ["pillow>=13.0.0"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
