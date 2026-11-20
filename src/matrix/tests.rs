@@ -154,14 +154,41 @@ esac"#
 fn expected_rewrite_rejection_requires_a_precise_code_and_no_artifact() {
     let directory = tempdir().expect("temporary directory");
     let output = directory.path().join("roundtrip.dcm");
-    let generic = probe_error("OPERATION_FAILED", &output);
+    let generic = probe_error("OPERATION_FAILED", "roundtrip", "exit 1", &output);
     assert!(!rewrite_rejected(&generic, &output));
 
-    let precise = probe_error("REWRITE_UNSUPPORTED", &output);
+    let failed = CaseRecorder::new("case", &output, 0, None)
+        .fail_probe(MatrixPhase::RewriteResponse, generic);
+    assert_eq!(failed.status, PhaseStatus::Failed);
+    assert!(failed.runtime_ms > 0.0);
+    assert_eq!(failed.phases[0].elapsed_ms, Some(failed.runtime_ms));
+
+    for (operation, action) in [
+        ("inspect", "exit 1"),
+        ("unknown", "exit 1"),
+        ("roundtrip", "exit 0"),
+    ] {
+        let error = probe_error("REWRITE_UNSUPPORTED", operation, action, &output);
+        assert!(!rewrite_rejected(&error, &output), "{operation} {action}");
+    }
+
+    let timed_out = probe_error("REWRITE_UNSUPPORTED", "roundtrip", "exec sleep 10", &output);
+    assert!(!rewrite_rejected(&timed_out, &output));
+    let observation = CaseRecorder::new("case", &output, 0, None)
+        .fail_probe(MatrixPhase::RewriteResponse, timed_out);
+    assert_eq!(observation.status, PhaseStatus::TimedOut);
+
+    let precise = probe_error("REWRITE_UNSUPPORTED", "roundtrip", "exit 1", &output);
     assert!(rewrite_rejected(&precise, &output));
 
     fs::write(&output, b"partial").expect("partial output");
     assert!(!rewrite_rejected(&precise, &output));
+    #[cfg(unix)]
+    {
+        let dangling = directory.path().join("dangling-output.dcm");
+        std::os::unix::fs::symlink(directory.path().join("missing"), &dangling).unwrap();
+        assert!(!rewrite_rejected(&precise, &dangling));
+    }
 }
 
 #[test]
@@ -201,16 +228,21 @@ fn case_status_derivation_is_deterministic() {
     );
 }
 
-fn probe_error(code: &str, output: &Path) -> crate::probe::ProbeError {
+fn probe_error(
+    code: &str,
+    operation: &str,
+    action: &str,
+    output: &Path,
+) -> crate::probe::ProbeError {
     let report = json!({
         "schema_version": 1,
         "status": "error",
-        "operation": "roundtrip",
+        "operation": operation,
         "implementation": {"name": "synthetic", "version": "1"},
-        "error": {"code": code, "message": "rejected"}
+        "error": {"code": code, "message": "remote validator timed out"}
     });
     let script = format!(
-        "printf '%s' '{}'; exit 1",
+        "printf '%s' '{}'; {action}",
         serde_json::to_string(&report).expect("report serialization")
     );
     ViewerProbe::new(

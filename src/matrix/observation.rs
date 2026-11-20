@@ -76,6 +76,35 @@ pub struct PhaseObservation {
     pub details: Option<Value>,
 }
 
+impl PhaseObservation {
+    pub(super) fn probe_error(phase: MatrixPhase, error: ProbeError) -> Self {
+        Self {
+            phase,
+            status: if error.timed_out() {
+                PhaseStatus::TimedOut
+            } else {
+                PhaseStatus::Failed
+            },
+            elapsed_ms: error.elapsed_ms(),
+            message: error.to_string(),
+            command: error.command.map(|command| *command),
+            peak_rss_bytes: error.peak_rss_bytes,
+            output_truncated: error
+                .process
+                .as_ref()
+                .map(|p| p.stdout_truncated || p.stderr_truncated),
+            error_code: error
+                .report
+                .as_ref()
+                .and_then(|r| r.pointer("/error/code"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            artifacts: Vec::new(),
+            details: error.report,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct MatrixObservation {
     pub schema_version: u8,
@@ -227,34 +256,9 @@ impl CaseRecorder {
     }
 
     pub(super) fn fail_probe(mut self, phase: MatrixPhase, error: ProbeError) -> MatrixObservation {
-        let error_code = error
-            .report
-            .as_ref()
-            .and_then(|report| report.pointer("/error/code"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let output_truncated = error
-            .process
-            .as_ref()
-            .map(|process| process.stdout_truncated || process.stderr_truncated);
-        let message = error.to_string();
-        self.record(PhaseObservation {
-            phase,
-            status: if message.contains("timed out") {
-                PhaseStatus::TimedOut
-            } else {
-                PhaseStatus::Failed
-            },
-            command: error.command.map(|command| *command),
-            elapsed_ms: None,
-            peak_rss_bytes: error.peak_rss_bytes,
-            output_truncated,
-            error_code,
-            message: message.clone(),
-            artifacts: Vec::new(),
-            details: error.report,
-        });
-        self.observation.message = message;
+        let failure = PhaseObservation::probe_error(phase, error);
+        self.observation.message.clone_from(&failure.message);
+        self.record(failure);
         self.finish()
     }
 
