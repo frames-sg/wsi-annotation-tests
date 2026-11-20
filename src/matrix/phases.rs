@@ -247,33 +247,13 @@ fn read_only_seg(
     ) {
         Err(error) => {
             let rejected = rewrite_rejected(&error, &output_path);
-            let code = error
-                .report
-                .as_ref()
-                .and_then(|report| report.pointer("/error/code"))
-                .and_then(Value::as_str)
-                .map(str::to_owned);
-            let message = error.to_string();
-            recorder.record(PhaseObservation {
-                phase: MatrixPhase::RewriteResponse,
-                status: if rejected {
-                    PhaseStatus::RejectedAsExpected
-                } else {
-                    PhaseStatus::Failed
-                },
-                command: error.command.map(|command| *command),
-                elapsed_ms: None,
-                peak_rss_bytes: error.peak_rss_bytes,
-                output_truncated: error
-                    .process
-                    .as_ref()
-                    .map(|process| process.stdout_truncated || process.stderr_truncated),
-                error_code: code.clone(),
-                message: message.clone(),
-                artifacts: Vec::new(),
-                details: error.report,
-            });
-            (rejected, code, message)
+            let mut phase = PhaseObservation::probe_error(MatrixPhase::RewriteResponse, error);
+            if rejected {
+                phase.status = PhaseStatus::RejectedAsExpected;
+            }
+            let outcome = (rejected, phase.error_code.clone(), phase.message.clone());
+            recorder.record(phase);
+            outcome
         }
         Ok(observation) => {
             recorder.record(PhaseObservation {
@@ -394,13 +374,10 @@ fn metric_phase(metrics: Option<&Value>) -> PhaseObservation {
 }
 
 pub(super) fn rewrite_rejected(error: &ProbeError, output: &Path) -> bool {
-    error
-        .report
-        .as_ref()
-        .and_then(|report| report.pointer("/error/code"))
-        .and_then(Value::as_str)
-        == Some("REWRITE_UNSUPPORTED")
-        && !output.exists()
+    error.rejected_with("REWRITE_UNSUPPORTED")
+        && output
+            .symlink_metadata()
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
 }
 
 fn rewrite_identity_message(input: &DicomMetadata, output: &DicomMetadata) -> Option<String> {

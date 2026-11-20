@@ -4,7 +4,7 @@
   "dtype": "float32",
   "axes": ["y", "x"],
   "grid_origin": {"x": 0.0, "y": 0.0},
-  "sample_spacing": {"x": 0.03, "y": 1.0},
+  "sample_spacing": {"x": 0.029296875, "y": 1.0},
   "coordinate_space": "level0-pixels",
   "channels": [
     {

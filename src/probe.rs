@@ -138,6 +138,15 @@ pub struct ProbeError {
 struct ProbeErrorDetails {
     message: String,
     elapsed_ms: Option<f64>,
+    #[serde(skip)]
+    kind: ProbeFailureKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProbeFailureKind {
+    Other,
+    TimedOut,
+    Rejected,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +167,20 @@ impl fmt::Display for ProbeError {
 impl std::error::Error for ProbeError {}
 
 impl ProbeError {
+    pub(crate) fn rejected_with(&self, code: &str) -> bool {
+        self.details.kind == ProbeFailureKind::Rejected
+            && self
+                .report
+                .as_ref()
+                .and_then(|r| r.pointer("/error/code"))
+                .and_then(Value::as_str)
+                == Some(code)
+    }
+
+    pub(crate) fn timed_out(&self) -> bool {
+        self.details.kind == ProbeFailureKind::TimedOut
+    }
+
     pub(crate) fn measurements(&self) -> ProbeMeasurements {
         ProbeMeasurements {
             runtime_ms: self.elapsed_ms(),
@@ -461,13 +484,14 @@ impl ViewerProbe {
                     || format!("annotation_probe exited with status {}", output.status),
                     str::to_owned,
                 );
-            return Err(observed_error(
-                message,
-                Some(report),
-                stderr,
-                &output,
-                &display_command,
-            ));
+            let rejected =
+                output.status.code().is_some_and(|code| code != 0) && report["status"] == "error";
+            let mut error =
+                observed_error(message, Some(report), stderr, &output, &display_command);
+            if rejected {
+                error.details.kind = ProbeFailureKind::Rejected;
+            }
+            return Err(error);
         }
         Ok(ProbeObservation {
             command: display_command,
@@ -491,6 +515,7 @@ fn configuration_error(message: &str) -> ProbeError {
         details: Box::new(ProbeErrorDetails {
             message: message.to_owned(),
             elapsed_ms: None,
+            kind: ProbeFailureKind::Other,
         }),
         report: None,
         stderr: String::new(),
@@ -512,6 +537,7 @@ fn observed_error(
         details: Box::new(ProbeErrorDetails {
             message,
             elapsed_ms: Some(output.elapsed.as_secs_f64() * 1000.0),
+            kind: ProbeFailureKind::Other,
         }),
         report,
         stderr,
@@ -535,6 +561,7 @@ fn process_error(error: ProcessError) -> ProbeError {
         ProcessError::TimedOut { timeout, output } => ProbeError {
             details: Box::new(ProbeErrorDetails {
                 elapsed_ms: Some(output.elapsed.as_secs_f64() * 1000.0),
+                kind: ProbeFailureKind::TimedOut,
                 message: format!(
                     "annotation_probe timed out after {} seconds",
                     timeout.as_secs_f64()
@@ -560,6 +587,7 @@ fn process_error(error: ProcessError) -> ProbeError {
         error => ProbeError {
             details: Box::new(ProbeErrorDetails {
                 elapsed_ms: None,
+                kind: ProbeFailureKind::Other,
                 message: format!("annotation_probe execution failed: {error}"),
             }),
             report: None,

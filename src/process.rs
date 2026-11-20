@@ -1,11 +1,13 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, Signal, System};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use wait4::Wait4;
 
 pub(crate) const DEFAULT_SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 pub(crate) const DEFAULT_STDOUT_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -195,22 +197,19 @@ pub(crate) fn run(spec: &ProcessSpec) -> Result<ProcessOutput, ProcessError> {
     let started = Instant::now();
     let mut sampler = Sampler::new(root, spec.sample_interval);
 
-    let mut child_status = None;
     let status = loop {
         sampler.sample();
-        if child_status.is_none() {
-            child_status = child.try_wait().map_err(ProcessError::Wait)?;
-        }
-        if let Some(status) = child_status
-            && stdout.is_finished()
+        // Keep the child PID reserved while descendants may still hold its pipes.
+        if stdout.is_finished()
             && stderr.is_finished()
+            && let Some(status) = sampler.try_wait(&mut child).map_err(ProcessError::Wait)?
         {
             break status;
         }
         if started.elapsed() >= spec.timeout {
             terminate_process_tree(sampler.system_mut(), &child);
             let _ = child.kill();
-            let _ = child.wait();
+            sampler.wait(child).map_err(ProcessError::Wait)?;
             let cleanup_deadline = Instant::now() + Duration::from_secs(2);
             let stdout = join_reader_until(stdout, "stdout", cleanup_deadline)?;
             let stderr = join_reader_until(stderr, "stderr", cleanup_deadline)?;
@@ -232,7 +231,6 @@ pub(crate) fn run(spec: &ProcessSpec) -> Result<ProcessOutput, ProcessError> {
             Duration::from_millis(10).min(spec.timeout.saturating_sub(started.elapsed())),
         );
     };
-    sampler.sample();
     Ok(ProcessOutput {
         status,
         stdout: join_reader(stdout, "stdout")?,
@@ -364,6 +362,30 @@ impl Sampler {
         self.interval.is_some()
     }
 
+    fn try_wait(&mut self, child: &mut Child) -> io::Result<Option<ExitStatus>> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if self.enabled() {
+            return Ok(child.try_wait4()?.map(|usage| self.record_exit(usage)));
+        }
+        child.try_wait()
+    }
+
+    fn wait(&mut self, mut child: Child) -> io::Result<ExitStatus> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if self.enabled() {
+            return child.wait4().map(|usage| self.record_exit(usage));
+        }
+        child.wait()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn record_exit(&mut self, usage: wait4::ResUse) -> ExitStatus {
+        // A short-lived probe can finish between tree samples. The kernel still
+        // reports this child's peak when we reap it.
+        self.peak_rss_bytes = self.peak_rss_bytes.max(usage.rusage.maxrss);
+        usage.status
+    }
+
     fn sample(&mut self) {
         let Some(interval) = self.interval else {
             return;
@@ -481,6 +503,8 @@ mod tests {
         assert_eq!(output.stderr.bytes, b"stderr");
         assert!(output.elapsed > Duration::ZERO);
         assert!(output.rss_sampled);
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        assert!(output.peak_rss_bytes > 0);
         assert_eq!(output.sample_interval, Some(Duration::from_millis(100)));
     }
 
