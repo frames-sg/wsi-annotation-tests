@@ -25,6 +25,9 @@ ureq = { version = "3.4.0", default-features = false }
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process"] }
 
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+wait4 = "0.2"
+
 [lints.rust]
 unsafe_code = "forbid"
 
